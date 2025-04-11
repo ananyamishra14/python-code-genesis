@@ -1,11 +1,10 @@
 
 """
-Job-to-Be-Done Marketplace
+Smart Inventory & Demand Prediction System
 
-This is the main application file for the Job-to-Be-Done Marketplace platform.
-The platform allows users to submit problems (rather than job postings),
-and AI decomposes these problems into tasks, sources solutions,
-and manages micro-contractors.
+This is the main application file for the Smart Inventory & Demand Prediction System.
+The platform uses AI and machine learning to predict demand, optimize inventory levels,
+and provide data-driven insights for retail inventory management.
 
 Author: [Your Name]
 """
@@ -18,15 +17,34 @@ from werkzeug.security import generate_password_hash, check_password_hash
 import openai
 from datetime import datetime, timedelta
 import stripe
+import logging
+from logging.handlers import RotatingFileHandler
+import pandas as pd
+import numpy as np
+from endpoints import init_app as init_api_endpoints
 
 # Initialize Flask app
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-key-for-testing')
-app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///marketplace.db')
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///inventory.db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
+# Configure logging
+if not os.path.exists('logs'):
+    os.mkdir('logs')
+file_handler = RotatingFileHandler('logs/app.log', maxBytes=10240, backupCount=10)
+file_handler.setFormatter(logging.Formatter(
+    '%(asctime)s %(levelname)s: %(message)s [in %(pathname)s:%(lineno)d]'
+))
+file_handler.setLevel(logging.INFO)
+app.logger.addHandler(file_handler)
+app.logger.setLevel(logging.INFO)
+app.logger.info('Smart Inventory System startup')
+
 # Initialize database
-db = SQLAlchemy(app)
+from models import db, User, Product, Category, Sale, InventoryChange, Prediction, ExternalFactor
+
+db.init_app(app)
 
 # Initialize login manager
 login_manager = LoginManager()
@@ -39,64 +57,14 @@ openai.api_key = os.environ.get('OPENAI_API_KEY')
 # Configure Stripe API
 stripe.api_key = os.environ.get('STRIPE_SECRET_KEY')
 
-# Define database models
-class User(UserMixin, db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    email = db.Column(db.String(100), unique=True)
-    password = db.Column(db.String(200))
-    name = db.Column(db.String(100))
-    is_contractor = db.Column(db.Boolean, default=False)
-    skills = db.Column(db.String(500))
-    stripe_customer_id = db.Column(db.String(100))
-    date_created = db.Column(db.DateTime, default=datetime.utcnow)
-
-class Job(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    title = db.Column(db.String(200))
-    description = db.Column(db.Text)
-    client_id = db.Column(db.Integer, db.ForeignKey('user.id'))
-    budget = db.Column(db.Float)
-    timeline = db.Column(db.Integer)  # In days
-    status = db.Column(db.String(50), default='pending')  # pending, planning, in-progress, completed
-    success_criteria = db.Column(db.Text)
-    date_created = db.Column(db.DateTime, default=datetime.utcnow)
-    date_completed = db.Column(db.DateTime)
-
-class Task(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    job_id = db.Column(db.Integer, db.ForeignKey('job.id'))
-    title = db.Column(db.String(200))
-    description = db.Column(db.Text)
-    contractor_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
-    budget = db.Column(db.Float)
-    timeline = db.Column(db.Integer)  # In days
-    status = db.Column(db.String(50), default='open')  # open, assigned, in-progress, completed
-    skills_required = db.Column(db.String(500))
-    difficulty = db.Column(db.String(20))  # easy, medium, hard
-    date_created = db.Column(db.DateTime, default=datetime.utcnow)
-    date_completed = db.Column(db.DateTime)
-
-class Application(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    task_id = db.Column(db.Integer, db.ForeignKey('task.id'))
-    contractor_id = db.Column(db.Integer, db.ForeignKey('user.id'))
-    status = db.Column(db.String(50), default='pending')  # pending, accepted, rejected
-    date_applied = db.Column(db.DateTime, default=datetime.utcnow)
-
-class Payment(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    job_id = db.Column(db.Integer, db.ForeignKey('job.id'))
-    task_id = db.Column(db.Integer, db.ForeignKey('task.id'))
-    amount = db.Column(db.Float)
-    status = db.Column(db.String(50))  # pending, completed, failed
-    stripe_payment_id = db.Column(db.String(100))
-    date_created = db.Column(db.DateTime, default=datetime.utcnow)
+# Initialize API endpoints
+init_api_endpoints(app)
 
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
 
-# AI Task Decomposition
+# AI Task Decomposition (retained from previous codebase)
 def decompose_job(job_description, budget, timeline):
     """
     Use OpenAI to break down a job into smaller tasks
@@ -121,7 +89,7 @@ def decompose_job(job_description, budget, timeline):
     
     try:
         response = openai.ChatCompletion.create(
-            model="gpt-4o",
+            model="gpt-4-turbo",
             messages=[
                 {"role": "system", "content": "You are a helpful assistant that decomposes jobs into specific tasks."},
                 {"role": "user", "content": prompt}
@@ -132,7 +100,7 @@ def decompose_job(job_description, budget, timeline):
         # In a real implementation, parse the JSON and validate
         return tasks
     except Exception as e:
-        print(f"Error in AI decomposition: {e}")
+        app.logger.error(f"Error in AI decomposition: {e}")
         return None
 
 # Routes
@@ -199,6 +167,8 @@ def logout():
 def dashboard():
     if current_user.is_contractor:
         # For contractors: show available tasks and applied tasks
+        from models import Task, Application
+        
         available_tasks = Task.query.filter_by(status='open').all()
         applications = Application.query.filter_by(contractor_id=current_user.id).all()
         applied_task_ids = [app.task_id for app in applications]
@@ -208,9 +178,36 @@ def dashboard():
                               available_tasks=available_tasks,
                               applied_tasks=applied_tasks)
     else:
-        # For clients: show their jobs
-        jobs = Job.query.filter_by(client_id=current_user.id).all()
-        return render_template('client_dashboard.html', jobs=jobs)
+        # For clients/retailers: show inventory dashboard
+        low_stock_count = Product.query.filter(
+            (Product.current_stock <= Product.reorder_point) & 
+            (Product.is_active == True)
+        ).count()
+        
+        total_products = Product.query.filter_by(is_active=True).count()
+        
+        # Get total inventory value
+        products = Product.query.filter_by(is_active=True).all()
+        total_value = sum(p.current_stock * p.price for p in products)
+        
+        # Get recent sales data
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=7)
+        
+        recent_sales = Sale.query.filter(
+            Sale.date >= start_date,
+            Sale.date <= end_date
+        ).all()
+        
+        total_sales = sum(sale.quantity for sale in recent_sales)
+        total_revenue = sum(sale.total_price for sale in recent_sales)
+        
+        return render_template('inventory_dashboard.html',
+                              low_stock_count=low_stock_count,
+                              total_products=total_products,
+                              total_value=total_value,
+                              total_sales=total_sales,
+                              total_revenue=total_revenue)
 
 @app.route('/submit_problem', methods=['GET', 'POST'])
 @login_required
@@ -223,6 +220,8 @@ def submit_problem():
         success_criteria = request.form.get('success_criteria')
         
         # Create new job
+        from models import Job
+        
         new_job = Job(
             title=title,
             description=description,
@@ -241,6 +240,8 @@ def submit_problem():
         
         # In a real implementation, parse the JSON and create tasks
         # For this example, we'll create dummy tasks
+        from models import Task
+        
         task_budget = budget / 3
         task_timeline = timeline / 3
         
@@ -268,6 +269,8 @@ def submit_problem():
 @app.route('/job/<int:job_id>')
 @login_required
 def view_job(job_id):
+    from models import Job, Task
+    
     job = Job.query.get_or_404(job_id)
     
     # Ensure user owns the job or is an admin
@@ -284,6 +287,8 @@ def apply_task(task_id):
         return jsonify({"error": "Only contractors can apply for tasks"}), 403
     
     # Check if already applied
+    from models import Application
+    
     existing_application = Application.query.filter_by(
         task_id=task_id, 
         contractor_id=current_user.id
@@ -348,6 +353,153 @@ def webhook():
         # In a real implementation, you would update your database here
         
     return 'Success', 200
+
+# New Inventory Management Routes
+
+@app.route('/inventory')
+@login_required
+def inventory_dashboard():
+    # Redirect to React frontend for inventory management
+    return render_template('inventory_dashboard.html')
+
+@app.route('/inventory/products')
+@login_required
+def inventory_products():
+    # Fetch products for server-side rendering
+    products = Product.query.filter_by(is_active=True).all()
+    categories = Category.query.all()
+    
+    return render_template('inventory_products.html', 
+                          products=products, 
+                          categories=categories)
+
+@app.route('/inventory/product/<int:product_id>')
+@login_required
+def view_product(product_id):
+    product = Product.query.get_or_404(product_id)
+    
+    # Get sales history
+    recent_sales = Sale.query.filter_by(product_id=product_id).order_by(Sale.date.desc()).limit(10).all()
+    
+    # Get inventory changes
+    inventory_changes = InventoryChange.query.filter_by(product_id=product_id).order_by(InventoryChange.date.desc()).limit(10).all()
+    
+    # Get predictions if available
+    predictions = Prediction.query.filter_by(product_id=product_id).order_by(Prediction.date).all()
+    
+    return render_template('view_product.html',
+                          product=product,
+                          recent_sales=recent_sales,
+                          inventory_changes=inventory_changes,
+                          predictions=predictions)
+
+@app.route('/inventory/analytics')
+@login_required
+def inventory_analytics():
+    # Redirect to React frontend for analytics
+    return render_template('inventory_analytics.html')
+
+@app.route('/inventory/predictions')
+@login_required
+def inventory_predictions():
+    # Redirect to React frontend for predictions
+    return render_template('inventory_predictions.html')
+
+@app.route('/inventory/optimizer')
+@login_required
+def inventory_optimizer():
+    # Redirect to React frontend for optimizer
+    return render_template('inventory_optimizer.html')
+
+# API route for generating predictions
+@app.route('/api/generate-predictions/<int:product_id>', methods=['POST'])
+@login_required
+def generate_predictions(product_id):
+    try:
+        # Check if product exists
+        product = Product.query.get_or_404(product_id)
+        
+        # Get historical sales data
+        from prediction_utils import (DemandPredictor, get_sales_data, 
+                                    get_external_factors)
+        
+        # Get past sales data for training
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=180)  # 6 months of data
+        
+        sales_data = get_sales_data(db, product_id, start_date, end_date)
+        
+        if sales_data.empty:
+            return jsonify({'error': 'Insufficient sales data for predictions'}), 400
+        
+        # Get external factors
+        external_factors = get_external_factors(db, start_date, end_date)
+        
+        # Get model type from request
+        data = request.json
+        model_type = data.get('model_type', 'prophet')  # Default to prophet
+        
+        # Initialize predictor
+        predictor = DemandPredictor(model_type=model_type)
+        
+        # Preprocess data
+        processed_data = predictor.preprocess_data(sales_data, external_factors)
+        
+        # Train model
+        metrics = predictor.train(processed_data, product_id)
+        
+        # Generate predictions
+        future_external_factors = None  # For a real implementation, you would predict these
+        predictions = predictor.predict(horizon=30, external_factors=future_external_factors)
+        
+        # Clear old predictions
+        old_predictions = Prediction.query.filter_by(product_id=product_id).all()
+        for pred in old_predictions:
+            db.session.delete(pred)
+        
+        # Store new predictions
+        for _, row in predictions.iterrows():
+            prediction = Prediction(
+                product_id=product_id,
+                date=row['date'],
+                predicted_demand=row['predicted_demand'],
+                confidence_lower=row['confidence_lower'],
+                confidence_upper=row['confidence_upper'],
+                factors=json.dumps({
+                    'data_points': len(processed_data),
+                    'features': predictor.features,
+                    'metrics': metrics
+                }),
+                model_version=f"{model_type}-1.0"
+            )
+            db.session.add(prediction)
+        
+        db.session.commit()
+        
+        # Create response data
+        result = {
+            'product': {
+                'id': product.id,
+                'name': product.name,
+                'sku': product.sku
+            },
+            'metrics': metrics,
+            'predictions': [
+                {
+                    'date': row['date'].strftime('%Y-%m-%d') if isinstance(row['date'], datetime) else row['date'],
+                    'predicted_demand': float(row['predicted_demand']),
+                    'confidence_lower': float(row['confidence_lower']),
+                    'confidence_upper': float(row['confidence_upper'])
+                }
+                for _, row in predictions.iterrows()
+            ]
+        }
+        
+        return jsonify(result)
+    
+    except Exception as e:
+        app.logger.error(f"Error generating predictions: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
 # Main entry point
 if __name__ == '__main__':
