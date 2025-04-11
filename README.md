@@ -1,73 +1,100 @@
-# Welcome to your Lovable project
 
-## Project info
+# Job-to-Be-Done Marketplace
 
-**URL**: https://lovable.dev/projects/5aa2d2c2-78d9-44a4-b72d-7187c07bb573
+A revolutionary approach to freelance marketplaces where users submit problems instead of hiring freelancers directly. AI decomposes tasks, sources solutions, and manages micro-contractors.
 
-## How can I edit this code?
+## Project Overview
 
-There are several ways of editing your application.
+This marketplace flips the traditional freelancing model on its head. Instead of browsing through freelancer profiles and managing multiple contractors yourself, you simply submit your problem (e.g., "Get 10K legit website visitors"), and our platform does the rest.
 
-**Use Lovable**
+### Key Features
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/5aa2d2c2-78d9-44a4-b72d-7187c07bb573) and start prompting.
+- **Problem-First Approach**: Submit what you need done, not who you need to hire
+- **AI Task Decomposition**: Our system breaks down complex problems into manageable micro-tasks
+- **Smart Matching**: AI matches tasks with the best-qualified micro-contractors
+- **Managed Execution**: The platform coordinates all contractors and ensures quality results
+- **Secure Payments**: Integrated payment system with Stripe Connect and smart contracts
 
-Changes made via Lovable will be committed automatically to this repo.
+## Tech Stack
 
-**Use your preferred IDE**
+- **Backend**: Python with Flask
+- **Database**: SQLAlchemy with SQLite (configurable for production databases)
+- **AI Integration**: OpenAI GPT-4 for task decomposition and contractor matching
+- **Payment Processing**: Stripe Connect for secure payments
+- **Smart Contracts**: Custom contract generation and management
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+## Project Structure
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+- `app.py`: Main application file with Flask routes and core functionality
+- `models.py`: Database models and schema
+- `ai_utils.py`: AI-related functions for task decomposition and matching
+- `templates/`: HTML templates for the web interface
+- `static/`: Static files (CSS, JavaScript, images)
 
-Follow these steps:
+## How It Works
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+1. **Client Submits Problem**: The client describes what they need done, sets a budget and timeline
+2. **AI Decomposition**: The system breaks down the problem into specific tasks
+3. **Task Matching**: Tasks are matched with qualified contractors
+4. **Execution**: Contractors complete tasks under AI coordination
+5. **Quality Control**: Results are verified against success criteria
+6. **Payment**: Secure payment is released to contractors
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+## Getting Started
 
-# Step 3: Install the necessary dependencies.
-npm i
+### Prerequisites
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
-```
+- Python 3.8+
+- OpenAI API key
+- Stripe API keys
 
-**Edit a file directly in GitHub**
+### Installation
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+1. Clone the repository
+   ```
+   git clone https://github.com/yourusername/job-to-be-done-marketplace.git
+   cd job-to-be-done-marketplace
+   ```
 
-**Use GitHub Codespaces**
+2. Create a virtual environment
+   ```
+   python -m venv venv
+   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   ```
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+3. Install dependencies
+   ```
+   pip install -r requirements.txt
+   ```
 
-## What technologies are used for this project?
+4. Set up environment variables
+   ```
+   export FLASK_APP=app.py
+   export FLASK_ENV=development
+   export OPENAI_API_KEY=your_openai_api_key
+   export STRIPE_SECRET_KEY=your_stripe_secret_key
+   export STRIPE_WEBHOOK_SECRET=your_stripe_webhook_secret
+   ```
 
-This project is built with:
+5. Initialize the database
+   ```
+   flask db init
+   flask db migrate
+   flask db upgrade
+   ```
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+6. Run the application
+   ```
+   flask run
+   ```
 
-## How can I deploy this project?
+## Future Enhancements
 
-Simply open [Lovable](https://lovable.dev/projects/5aa2d2c2-78d9-44a4-b72d-7187c07bb573) and click on Share -> Publish.
+- **Enhanced AI Agents**: Implementation of AutoGPT-style agents for better task management
+- **Blockchain Integration**: Smart contracts on a blockchain for trustless transactions
+- **Advanced Analytics**: Detailed analytics for clients to track performance
+- **Mobile Applications**: Native mobile apps for iOS and Android
 
-## Can I connect a custom domain to my Lovable project?
+## License
 
-Yes it is!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/tips-tricks/custom-domain#step-by-step-guide)
+This project is licensed under the MIT License - see the LICENSE file for details.
